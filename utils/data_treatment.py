@@ -9,7 +9,7 @@ def mode_or_median(values):
         return values.median()
 
 def main():
-    df = pd.read_csv("assets/fitcow_base.csv")
+    df = pd.read_csv("assets/fitcow_completa.csv")
     
     g1_cols = ["av1_g1", "av2_g1", "av3_g1"]
     g2_cols = ["av1_g2", "av2_g2", "av3_g2"]
@@ -24,7 +24,11 @@ def main():
     
     clean_df["ID"] = clean_df["Rebanho"].astype(str) + clean_df["RGD"].astype(str)
     
-    clean_df.to_csv("assets/test_df.csv", sep=";", decimal=",",  index=False)
+    clean_df.to_csv("assets/test_df2.csv", sep=";", decimal=",",  index=False)
+    
+    short_df = clean_df[["ID", "mode_g1", "mode_g2"]]
+    short_df["mode_g2"] = short_df["mode_g2"].astype(int)
+    short_df.to_csv("assets/fitcow.csv", sep=";", decimal=",", index=False)
 
 if __name__ == '__main__':
     
