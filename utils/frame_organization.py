@@ -9,7 +9,7 @@ df_file = 'assets/fitcow.csv'
 def main ():
     df = pd.read_csv(df_file, decimal=',', sep=';')
     map = dict(zip(df['ID'].astype(str), df['mode_g1'].astype(str)))
-    classes = df['mode_g1'].drop_duplicates(ignore_index=True)
+    classes = sorted(df['mode_g1'].drop_duplicates(ignore_index=True))
         
     if not os.path.exists(destination_folder):
         os.makedirs(destination_folder)
