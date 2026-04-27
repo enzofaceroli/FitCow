@@ -7,6 +7,8 @@ from data_loader.data_loader import get_fitcow_loaders
 import argparse
 from tests.resnet50_tests import RESNET50_TESTS
 from tests.densenet121_tests import DENSENET121_TESTS
+from utils.focal_loss import FocalLoss
+from sklearn.utils.class_weight import compute_class_weight
 import os
 
 TESTS_MAP = {
@@ -67,6 +69,14 @@ def main():
         4: '4.5'
     }
     
+    class_to_idx = {
+        '2.5': 0,
+        '3.0': 1,
+        '3.5': 2,
+        '4.0': 3,
+        '4.5': 4
+    }
+    
     df = pd.read_csv('assets/fitcow_label.csv')
     
     for exp in TESTS:
@@ -95,7 +105,19 @@ def main():
             model = get_model(exp, num_classes=5)
             model.to(device)
             
-            criterion = nn.CrossEntropyLoss()
+            train_labels = df['class'].astype(str).map(class_to_idx)
+
+            calc_weights = compute_class_weight(
+                class_weight='balanced',
+                classes=np.unique(train_labels),
+                y=train_labels
+            )
+            
+            tensor_weights = torch.tensor(calc_weights, dtype=torch.float).to(device)
+    
+            # criterion = nn.CrossEntropyLoss()
+            criterion = FocalLoss(gamma=2.0, alpha=tensor_weights, num_classes=5)
+            
             optimizer = optim.Adam(
                 filter(lambda p: p.requires_grad, model.parameters()),
                 lr=exp["learning_rate"]
