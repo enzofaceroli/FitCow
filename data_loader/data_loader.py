@@ -1,5 +1,5 @@
 from torch.utils.data import DataLoader
-from dataset import fitcow_dataset
+from data_loader.dataset import fitcow_dataset
 from torchvision import transforms
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
