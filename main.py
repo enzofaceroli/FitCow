@@ -6,10 +6,12 @@ import numpy as np
 from data_loader.data_loader import get_fitcow_loaders
 import argparse
 from tests.resnet50_tests import RESNET50_TESTS
+from tests.densenet121_tests import DENSENET121_TESTS
 import os
 
 TESTS_MAP = {
     "resnet50": RESNET50_TESTS,
+    "densenet121": DENSENET121_TESTS
 }
 
 def parse_args():
@@ -25,10 +27,11 @@ def parse_args():
 
 
 from models.resnet50 import build_resnet50
+from models.densenet121 import build_densenet121
 
 from utils.train import train_model
 from utils.evaluate import evaluate_model
-from utils.plots import plot_confusion_matrix
+from utils.plots import plot_confusion_matrix, plot_training_curves
 from utils.logger import log_test
 
 def get_model(exp_config, num_classes):
@@ -36,6 +39,12 @@ def get_model(exp_config, num_classes):
     
     if model_name == "resnet50":
         return build_resnet50(
+            num_classes=num_classes,
+            freeze_backbone=exp_config["freeze_backbone"]
+        )
+        
+    elif model_name == "densenet121":
+        return build_densenet121(
             num_classes=num_classes,
             freeze_backbone=exp_config["freeze_backbone"]
         )
@@ -66,6 +75,9 @@ def main():
         fold_accs = []
         fold_maes = []
         
+        global_acc_history = {}
+        global_loss_history = {}
+        
         global_cm = np.zeros((5,5), dtype=int)
         
         for fold in range(1, 6):
@@ -89,7 +101,7 @@ def main():
                 lr=exp["learning_rate"]
             )
             
-            train_model(
+            acc_history, loss_history = train_model(
                 model=model,
                 train_loader=train_loader,
                 criterion=criterion,
@@ -98,6 +110,9 @@ def main():
                 epochs=exp['epochs']
             )
             
+            global_acc_history[fold] = acc_history
+            global_loss_history[fold] = loss_history
+                        
             acc, cm, mae = evaluate_model(model, test_loader, device)
             print(f"Fold {fold} results:\nAcc = {acc:.2f}%\nMAE = {mae:.3f}")
             
@@ -117,10 +132,13 @@ def main():
         print(f"Mean Accuracy Error: {mean_mae:.2f} ± {std_mae:.3f}\n")
 
         class_names = list(class_map.values())
-        cm_save_path = f"results/confusion_matrix_{exp['name']}.png"
+        
+        cm_path = f"results/confusion_matrix/cm_{exp['name']}.png"
+        graph_path = f"results/plots/plot_{exp['name']}.png"
+        csv_path = f"results/csv/result_table_{exp['name']}.csv"
         
         log_test(
-            csv_path=f"results/result_table_{exp['name']}.csv",
+            csv_path=csv_path,
             data={
                 "experiment_name": exp["name"],
                 "model": exp["model"],
@@ -133,7 +151,8 @@ def main():
             }
         )
         
-        plot_confusion_matrix(global_cm, class_names, cm_save_path)
+        plot_confusion_matrix(global_cm, class_names, cm_path)
+        plot_training_curves(global_acc_history, global_loss_history, graph_path)
         
 if __name__ == '__main__':
     main()

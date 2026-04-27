@@ -5,8 +5,11 @@ from data_loader.data_loader import get_fitcow_loaders
 def train_model(model, train_loader, criterion, optimizer, device, epochs=10):
     model.to(device)
     
+    acc_history = []
+    loss_history = []
+    
     for epoch in range(epochs):
-        print(f"Starting Epoch: {epoch}")
+        print(f"Starting Epoch: {epoch+1}")
     
         model.train()
         running_loss = 0.0
@@ -34,5 +37,9 @@ def train_model(model, train_loader, criterion, optimizer, device, epochs=10):
         epoch_loss = running_loss / total
         acc = 100.0 * correct / total
         
-        print(f"Epoch [{epoch+1}/{epochs}] - Loss: {epoch_loss:.4f} - Acc: {acc:.2f}%")
+        acc_history.append(acc)
+        loss_history.append(epoch_loss)
         
+        print(f"Epoch [{epoch+1}/{epochs}] - Loss: {epoch_loss:.4f} - Acc: {acc:.2f}%")
+    
+    return acc_history, loss_history
