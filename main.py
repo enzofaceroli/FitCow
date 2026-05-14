@@ -7,13 +7,15 @@ from data_loader.data_loader import get_fitcow_loaders
 import argparse
 from tests.resnet50_tests import RESNET50_TESTS
 from tests.densenet121_tests import DENSENET121_TESTS
+from tests.all_tests import ALL_TESTS
 from utils.focal_loss import FocalLoss
 from sklearn.utils.class_weight import compute_class_weight
 import os
 
 TESTS_MAP = {
     "resnet50": RESNET50_TESTS,
-    "densenet121": DENSENET121_TESTS
+    "densenet121": DENSENET121_TESTS,
+    "all": ALL_TESTS
 }
 
 def parse_args():
@@ -30,6 +32,8 @@ def parse_args():
 
 from models.resnet50 import build_resnet50
 from models.densenet121 import build_densenet121
+from models.vgg16 import build_vgg16
+from models.resnet18 import build_resnet18
 
 from utils.train import train_model
 from utils.evaluate import evaluate_model
@@ -47,6 +51,18 @@ def get_model(exp_config, num_classes):
         
     elif model_name == "densenet121":
         return build_densenet121(
+            num_classes=num_classes,
+            freeze_backbone=exp_config["freeze_backbone"]
+        )
+        
+    elif model_name == "vgg16":
+        return build_vgg16(
+            num_classes=num_classes,
+            freeze_backbone=exp_config["freeze_backbone"]
+        )
+        
+    elif model_name == "resnet18":
+        return build_resnet18(
             num_classes=num_classes,
             freeze_backbone=exp_config["freeze_backbone"]
         )
@@ -87,6 +103,7 @@ def main():
         
         global_acc_history = {}
         global_loss_history = {}
+        global_eval_acc_history = {}
         
         global_cm = np.zeros((5,5), dtype=int)
         
@@ -105,27 +122,40 @@ def main():
             model = get_model(exp, num_classes=5)
             model.to(device)
             
-            train_labels = df['class'].astype(str).map(class_to_idx)
+            train_labels = train_df['class'].astype(str).map(class_to_idx)
 
             calc_weights = compute_class_weight(
                 class_weight='balanced',
                 classes=np.unique(train_labels),
                 y=train_labels
             )
-            
-            tensor_weights = torch.tensor(calc_weights, dtype=torch.float).to(device)
-    
+                
             # criterion = nn.CrossEntropyLoss()
-            criterion = FocalLoss(gamma=2.0, alpha=tensor_weights, num_classes=5)
             
-            optimizer = optim.Adam(
-                filter(lambda p: p.requires_grad, model.parameters()),
-                lr=exp["learning_rate"]
+            # tensor_weights = torch.tensor(calc_weights, dtype=torch.float).to(device)
+            # criterion = nn.CrossEntropyLoss(weight=tensor_weights)
+            
+            criterion = FocalLoss(gamma=2.0, alpha=None)
+            # criterion = FocalLoss(gamma=2.0, alpha=tensor_weights, num_classes=5)
+            
+            # optimizer = optim.Adam(
+            #     filter(lambda p: p.requires_grad, model.parameters()),
+            #     lr=exp["learning_rate"]
+            # )
+            
+            optimizer = optim.AdamW(
+                model.parameters(), lr=exp["learning_rate"], weight_decay=1e-4
             )
             
-            acc_history, loss_history = train_model(
+            # optimizer = torch.optim.Adam([
+            #     {"params": model.layer4.parameters(), "lr": 1e-5},
+            #     {"params": model.fc.parameters(), "lr": 1e-4},
+            # ], weight_decay=1e-4)
+            
+            acc_history, loss_history, eval_acc_history = train_model(
                 model=model,
                 train_loader=train_loader,
+                test_loader=test_loader,
                 criterion=criterion,
                 optimizer=optimizer,
                 device=device,
@@ -134,6 +164,7 @@ def main():
             
             global_acc_history[fold] = acc_history
             global_loss_history[fold] = loss_history
+            global_eval_acc_history[fold] = eval_acc_history
                         
             acc, cm, mae = evaluate_model(model, test_loader, device)
             print(f"Fold {fold} results:\nAcc = {acc:.2f}%\nMAE = {mae:.3f}")
@@ -174,7 +205,7 @@ def main():
         )
         
         plot_confusion_matrix(global_cm, class_names, cm_path)
-        plot_training_curves(global_acc_history, global_loss_history, graph_path)
+        plot_training_curves(global_acc_history, global_loss_history, global_eval_acc_history, graph_path)
         
 if __name__ == '__main__':
     main()

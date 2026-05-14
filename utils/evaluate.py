@@ -26,7 +26,10 @@ def evaluate_model(model, test_loader, device):
         all_preds = np.array(all_preds)
         all_labels = np.array(all_labels)
         
-        acc = (all_preds == all_labels).mean()
+        print("Preds:", np.unique(all_preds, return_counts=True))
+        print("Labels:", np.unique(all_labels, return_counts=True))
+        
+        acc = (all_preds == all_labels).mean() * 100.0
         cm = confusion_matrix(all_labels, all_preds)
         mae_classes = np.abs(all_preds - all_labels).mean()
         real_mae = mae_classes * 0.5

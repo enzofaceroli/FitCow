@@ -27,9 +27,10 @@ def plot_confusion_matrix(cm, class_names, save_path=None):
 
     plt.close()
     
-def plot_training_curves(acc_history, loss_history, save_path=None):
+def plot_training_curves(acc_history, loss_history, eval_acc_history, save_path=None):
     acc_df = pd.DataFrame.from_dict(acc_history, orient='index')
     loss_df = pd.DataFrame.from_dict(loss_history, orient='index')
+    eval_acc_df = pd.DataFrame.from_dict(eval_acc_history, orient='index')
     
     epochs = acc_df.columns
     
@@ -38,6 +39,9 @@ def plot_training_curves(acc_history, loss_history, save_path=None):
     
     loss_mean = loss_df.mean(axis=0)
     loss_std = loss_df.std(axis=0)
+    
+    eval_acc_mean = eval_acc_df.mean(axis=0)
+    eval_acc_std = eval_acc_df.std(axis=0)
     
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     
@@ -49,8 +53,12 @@ def plot_training_curves(acc_history, loss_history, save_path=None):
     axes[0].legend()
     axes[0].grid(True, linestyle='--', alpha=0.6)
     
-    axes[1].plot(epochs, acc_mean, color='blue', linewidth=2, label='Acurácia Média')
+    axes[1].plot(epochs, acc_mean, color='blue', linewidth=2, label='Treino Média')
     axes[1].fill_between(epochs, acc_mean - acc_std, acc_mean + acc_std, color='blue', alpha=0.2)
+    
+    axes[1].plot(epochs, eval_acc_mean, color='green', linewidth=2, label='Validação Média')
+    axes[1].fill_between(epochs, eval_acc_mean - eval_acc_std, eval_acc_mean + eval_acc_std, color='green', alpha=0.2)
+    
     axes[1].set_title('Evolução da Acurácia de Treino')
     axes[1].set_xlabel('Épocas')
     axes[1].set_ylabel('Acurácia (%)')
