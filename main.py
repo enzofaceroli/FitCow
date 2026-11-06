@@ -29,11 +29,14 @@ def parse_args():
     
     return parser.parse_args()
 
+# from models.resnet50 import build_resnet50
+# from models.densenet121 import build_densenet121
+# from models.vgg16 import build_vgg16
+# from models.resnet18 import build_resnet18
+# from models.vit_tiny import build_vit_tiny
+# from models.dinov2 import build_dinov2
 
-from models.resnet50 import build_resnet50
-from models.densenet121 import build_densenet121
-from models.vgg16 import build_vgg16
-from models.resnet18 import build_resnet18
+from models.coral import build_densenet121, build_dinov2, build_resnet18, build_vgg16, build_resnet50, build_convnext_tiny
 
 from utils.train import train_model
 from utils.evaluate import evaluate_model
@@ -45,6 +48,12 @@ def get_model(exp_config, num_classes):
     
     if model_name == "resnet50":
         return build_resnet50(
+            num_classes=num_classes,
+            freeze_backbone=exp_config["freeze_backbone"]
+        )
+        
+    elif model_name == "dinov2":
+        return build_dinov2(
             num_classes=num_classes,
             freeze_backbone=exp_config["freeze_backbone"]
         )
@@ -63,6 +72,18 @@ def get_model(exp_config, num_classes):
         
     elif model_name == "resnet18":
         return build_resnet18(
+            num_classes=num_classes,
+            freeze_backbone=exp_config["freeze_backbone"]
+        )
+        
+    # elif model_name == "vit_tiny":
+    #     return build_vit_tiny(
+    #         num_classes=num_classes,
+    #         freeze_backbone=exp_config["freeze_backbone"]
+    #     )
+    
+    elif model_name == "convnext_tiny":
+        return build_convnext_tiny(
             num_classes=num_classes,
             freeze_backbone=exp_config["freeze_backbone"]
         )
@@ -96,14 +117,20 @@ def main():
     df = pd.read_csv('assets/fitcow_label.csv')
     
     for exp in TESTS:
-        print(f"Experiment: {exp['name']}")
-        
+        exp_name = f"model_{exp['model']}_bs{exp['batch_size']}_lr{exp['learning_rate']}_epochs{exp['epochs']}" 
+        print(f"Experiment: {exp_name}")
+                
         fold_accs = []
         fold_maes = []
-        
+        fold_losses = []
+
         global_acc_history = {}
+        global_mae_history = {}
         global_loss_history = {}
+
         global_eval_acc_history = {}
+        global_eval_mae_history = {}
+        global_eval_loss_history = {}
         
         global_cm = np.zeros((5,5), dtype=int)
         
@@ -129,83 +156,109 @@ def main():
                 classes=np.unique(train_labels),
                 y=train_labels
             )
-                
-            # criterion = nn.CrossEntropyLoss()
             
-            # tensor_weights = torch.tensor(calc_weights, dtype=torch.float).to(device)
+            tensor_weights = torch.tensor(calc_weights, dtype=torch.float).to(device)
+            tensor_weights = tensor_weights / tensor_weights.sum()
+            tensor_weights *= len(tensor_weights)
+
             # criterion = nn.CrossEntropyLoss(weight=tensor_weights)
             
-            criterion = FocalLoss(gamma=2.0, alpha=None)
-            # criterion = FocalLoss(gamma=2.0, alpha=tensor_weights, num_classes=5)
-            
-            # optimizer = optim.Adam(
-            #     filter(lambda p: p.requires_grad, model.parameters()),
-            #     lr=exp["learning_rate"]
-            # )
             
             optimizer = optim.AdamW(
                 model.parameters(), lr=exp["learning_rate"], weight_decay=1e-4
             )
             
-            # optimizer = torch.optim.Adam([
-            #     {"params": model.layer4.parameters(), "lr": 1e-5},
-            #     {"params": model.fc.parameters(), "lr": 1e-4},
-            # ], weight_decay=1e-4)
-            
-            acc_history, loss_history, eval_acc_history = train_model(
-                model=model,
-                train_loader=train_loader,
-                test_loader=test_loader,
-                criterion=criterion,
-                optimizer=optimizer,
-                device=device,
-                epochs=exp['epochs']
-            )
+            acc_history, mae_history, loss_history, eval_acc_history, eval_mae_history, eval_loss_history = train_model(
+                    model=model,
+                    train_loader=train_loader,
+                    test_loader=test_loader,
+                    criterion=criterion,
+                    optimizer=optimizer,
+                    device=device,
+                    epochs=exp['epochs']
+                )
             
             global_acc_history[fold] = acc_history
+            global_mae_history[fold] = mae_history
             global_loss_history[fold] = loss_history
+
             global_eval_acc_history[fold] = eval_acc_history
-                        
-            acc, cm, mae = evaluate_model(model, test_loader, device)
-            print(f"Fold {fold} results:\nAcc = {acc:.2f}%\nMAE = {mae:.3f}")
+            global_eval_mae_history[fold] = eval_mae_history
+            global_eval_loss_history[fold] = eval_loss_history   
+
+            acc, mae, cm, final_eval_loss = evaluate_model(
+                model=model,
+                test_loader=test_loader,
+                criterion=criterion,
+                device=device
+            )
+            print(f"Fold {fold} results:\nAcc = {acc:.2f}%\nLoss: {final_eval_loss:.4f}")
             
             fold_accs.append(acc)
             fold_maes.append(mae)
-            
+            fold_losses.append(final_eval_loss)
             global_cm += cm
             
         mean_acc = np.mean(fold_accs)
         std_acc = np.std(fold_accs)
-            
+
         mean_mae = np.mean(fold_maes)
         std_mae = np.std(fold_maes)
+
+        mean_loss = np.mean(fold_losses)
+        std_loss = np.std(fold_losses)
         
-        print(f"Experiment {exp['name']} results:")
+        print(f"Experiment {exp_name} results:")
+
         print(f"Accuracy: {mean_acc:.2f} ± {std_acc:.3f}")
-        print(f"Mean Accuracy Error: {mean_mae:.2f} ± {std_mae:.3f}\n")
+        print(f"MAE: {mean_mae:.4f} ± {std_mae:.4f}")
+        print(f"Loss: {mean_loss:.4f} ± {std_loss:.4f}")
 
         class_names = list(class_map.values())
         
-        cm_path = f"results/confusion_matrix/cm_{exp['name']}.png"
-        graph_path = f"results/plots/plot_{exp['name']}.png"
-        csv_path = f"results/csv/result_table_{exp['name']}.csv"
+        base_path = f"{exp['model']}/{exp_name}"
+        os.makedirs(base_path, exist_ok=True)
+
+        cm_path = f"{base_path}/confusion_matrix.pdf"
+        graph_path = f"{base_path}/plot.pdf"
+        csv_path = f"{base_path}/result_table.csv"
+                
+        log_data = {
+            "experiment_name": exp_name,
+            "model": exp["model"],
+            "batch_size": exp["batch_size"],
+            "learning_rate": exp["learning_rate"],
+            "epochs": exp["epochs"],
+            "augmentation": exp["augmentation"],
+            # "input_size": 224,
+            "mean_accuracy": f"{mean_acc:.4f}",
+            "std_accuracy": f"{std_acc:.4f}",
+            "mean_mae": f"{mean_mae:.4f}",
+            "std_mae": f"{std_mae:.4f}",
+            "mean_loss": f"{mean_loss:.4f}",
+            "std_loss": f"{std_loss:.4f}"
+        }
+                
+        for i in range(5):
+            log_data[f"fold_{i+1}_acc"] = f"{fold_accs[i]:.4f}"
+            log_data[f"fold_{i+1}_mae"] = f"{fold_maes[i]:.4f}"
+            log_data[f"fold_{i+1}_loss"] = f"{fold_losses[i]:.4f}"
         
         log_test(
             csv_path=csv_path,
-            data={
-                "experiment_name": exp["name"],
-                "model": exp["model"],
-                "batch_size": exp["batch_size"],
-                "learning_rate": exp["learning_rate"],
-                "epochs": exp["epochs"],
-                "augmentation": exp["augmentation"],
-                "input_size": 224,
-                "accuracy": mean_acc
-            }
+            data=log_data
         )
         
         plot_confusion_matrix(global_cm, class_names, cm_path)
-        plot_training_curves(global_acc_history, global_loss_history, global_eval_acc_history, graph_path)
+        plot_training_curves(
+            global_acc_history,
+            global_mae_history,
+            global_loss_history,
+            global_eval_acc_history,
+            global_eval_mae_history,
+            global_eval_loss_history,
+            graph_path
+        )
         
 if __name__ == '__main__':
     main()
