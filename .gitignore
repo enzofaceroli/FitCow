@@ -11,3 +11,6 @@ wheels/
 
 assets/*
 results
+results_old
+rotated
+coral_results
